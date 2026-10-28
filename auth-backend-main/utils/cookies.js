@@ -1,7 +1,7 @@
 // Frontend (Vercel) and backend (Render) live on different domains, so cookies must be
 // SameSite=None + Secure to be sent cross-site. That requires HTTPS everywhere, which
 // both Vercel and Render give you by default.
-const isProd = process.env.NODE_ENV === "production";
+const isProd = process.env.NODE_ENV?.toLowerCase() === "production";
 
 console.log("COOKIE DEBUG:", {
   NODE_ENV: process.env.NODE_ENV,

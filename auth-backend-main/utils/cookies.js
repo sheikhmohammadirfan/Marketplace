@@ -25,13 +25,13 @@ function setAuthCookies(res, { accessToken, refreshToken }) {
   res.cookie("refresh_token", refreshToken, {
     ...baseCookieOptions,
     maxAge: Number(process.env.REFRESH_TOKEN_TTL_DAYS || 30) * 24 * 60 * 60 * 1000,
-    path: "/api/auth", // only sent to auth endpoints (refresh/logout) — reduces exposure
+    path: "/", // only sent to auth endpoints (refresh/logout) — reduces exposure
   });
 }
 
 function clearAuthCookies(res) {
   res.clearCookie("access_token", { ...baseCookieOptions });
-  res.clearCookie("refresh_token", { ...baseCookieOptions, path: "/api/auth" });
+  res.clearCookie("refresh_token", { ...baseCookieOptions, path: "/" });
 }
 
 module.exports = { setAuthCookies, clearAuthCookies, baseCookieOptions };

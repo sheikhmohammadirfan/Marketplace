@@ -3,13 +3,6 @@
 // both Vercel and Render give you by default.
 const isProd = process.env.NODE_ENV?.toLowerCase() === "production";
 
-console.log("COOKIE DEBUG:", {
-  NODE_ENV: process.env.NODE_ENV,
-  isProd,
-  secure: isProd,
-  sameSite: isProd ? "none" : "lax",
-});
-
 const baseCookieOptions = {
   httpOnly: true,
   secure: isProd, // must be true in production (HTTPS); relaxed locally over http
@@ -25,13 +18,13 @@ function setAuthCookies(res, { accessToken, refreshToken }) {
   res.cookie("refresh_token", refreshToken, {
     ...baseCookieOptions,
     maxAge: Number(process.env.REFRESH_TOKEN_TTL_DAYS || 30) * 24 * 60 * 60 * 1000,
-    path: "/", // only sent to auth endpoints (refresh/logout) — reduces exposure
+    path: "/api/auth", // only sent to auth endpoints (refresh/logout) — reduces exposure
   });
 }
 
 function clearAuthCookies(res) {
-  res.clearCookie("access_token", { ...baseCookieOptions });
-  res.clearCookie("refresh_token", { ...baseCookieOptions, path: "/" });
+  res.clearCookie("access_token", { ...baseCookieOptions, path: "/" });
+  res.clearCookie("refresh_token", { ...baseCookieOptions, path: "/api/auth" });
 }
 
 module.exports = { setAuthCookies, clearAuthCookies, baseCookieOptions };

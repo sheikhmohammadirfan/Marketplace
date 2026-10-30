@@ -208,7 +208,6 @@ const login = async (req, res) => {
 // pattern only happens if a stolen refresh token is being replayed.
 const refresh = async (req, res) => {
   try {
-     console.log("REFRESH COOKIE RECEIVED:", Boolean(req.cookies?.refresh_token));
     const rawToken = req.cookies?.refresh_token;
     if (!rawToken) return res.status(401).json({ message: "No refresh token provided" });
 

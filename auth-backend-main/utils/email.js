@@ -23,13 +23,17 @@ async function sendMail({ to, subject, html, link }) {
   const from = process.env.EMAIL_FROM || "no-reply@example.com";
 
   if (!t) {
-    console.log("\n📧 [DEV EMAIL — SMTP not configured]");
-    console.log("To:", to);
-    console.log("Subject:", subject);
-    if (link) console.log("ACTION LINK:", link);
-    console.log("----------------------------------------\n");
-    return;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("SMTP is not configured. Email could not be sent.");
   }
+
+  console.log("\n📧 [DEV EMAIL — SMTP not configured]");
+  console.log("To:", to);
+  console.log("Subject:", subject);
+  if (link) console.log("ACTION LINK:", link);
+  console.log("----------------------------------------\n");
+  return;
+}
 
   await t.sendMail({ from, to, subject, html });
 }

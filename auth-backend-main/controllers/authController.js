@@ -57,12 +57,30 @@ const register = async (req, res) => {
     const { name, email, password } = req.body;
 
     const existing = await User.findOne({ email });
-    if (existing) {
-      // Same response whether or not the email exists, to avoid leaking account existence.
-      return res.status(201).json({
-        message: "If this email isn't already registered, a verification link has been sent.",
-      });
-    }
+
+if (existing) {
+  if (!existing.isVerified) {
+    const { raw, hash, expires } = generateOneTimeToken(24 * 60);
+
+    existing.emailVerificationTokenHash = hash;
+    existing.emailVerificationExpires = expires;
+    await existing.save();
+
+    const verifyLink = `${process.env.FRONTEND_URL}/verify-email?token=${raw}`;
+    await sendVerificationEmail(existing.email, verifyLink);
+
+    await logAudit({
+      req,
+      actor: existing._id,
+      actorEmail: existing.email,
+      action: "EMAIL_VERIFICATION_RESENT",
+    });
+  }
+
+  return res.status(201).json({
+    message: "If this email isn't already registered, a verification link has been sent.",
+  });
+}
 
     const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const { raw, hash, expires } = generateOneTimeToken(24 * 60); // 24h
@@ -186,14 +204,22 @@ const login = async (req, res) => {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    // Successful login — reset lockout counters
-    user.failedLoginAttempts = 0;
-    user.lockUntil = undefined;
-    user.lastLoginAt = new Date();
-    user.lastLoginIp = req.ip;
-    await user.save();
+    // Block login until email verification is complete
+if (!user.isVerified) {
+  return res.status(403).json({
+    message: "Please verify your email before logging in.",
+    code: "EMAIL_NOT_VERIFIED",
+  });
+}
 
-    await issueSession(res, user, req);
+// Successful login — reset lockout counters
+user.failedLoginAttempts = 0;
+user.lockUntil = undefined;
+user.lastLoginAt = new Date();
+user.lastLoginIp = req.ip;
+await user.save();
+
+await issueSession(res, user, req);
     await logAudit({ req, actor: user._id, actorEmail: email, action: "LOGIN_SUCCESS" });
 
     res.json({ user: publicUser(user) });

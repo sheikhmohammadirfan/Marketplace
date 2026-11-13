@@ -18,6 +18,8 @@ export default function AdminDashboard() {
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
@@ -49,6 +51,10 @@ export default function AdminDashboard() {
   }, [fetchUsers]);
 
   useEffect(() => {
+  setSelectedIds([]);
+}, [page, search, roleFilter]);
+
+  useEffect(() => {
     if (tab !== "audit" || !isSuperadmin) return;
     setLogsLoading(true);
     API.get("/admin/audit-logs", { params: { limit: 100 } })
@@ -74,7 +80,72 @@ export default function AdminDashboard() {
   const toggleStatus = (u) =>
     run(u.id, () => API.patch(`/admin/users/${u.id}/status`, { status: u.status === "active" ? "suspended" : "active" }), u.status === "active" ? "User suspended" : "User reactivated");
   const remove = (u) => window.confirm(`Delete ${u.email}? This cannot be undone.`) && run(u.id, () => API.delete(`/admin/users/${u.id}`), "User deleted");
+  const selectableUsers = users.filter(
+  (u) => u.role === "user" && u.id !== user?.id
+);
 
+const allSelected =
+  selectableUsers.length > 0 &&
+  selectableUsers.every((u) => selectedIds.includes(u.id));
+
+const toggleSelectAll = () => {
+  setSelectedIds(
+    allSelected
+      ? selectedIds.filter((id) => !selectableUsers.some((u) => u.id === id))
+      : [...new Set([...selectedIds, ...selectableUsers.map((u) => u.id)])]
+  );
+};
+
+const toggleSelectUser = (id) => {
+  setSelectedIds((prev) =>
+    prev.includes(id)
+      ? prev.filter((item) => item !== id)
+      : [...prev, id]
+  );
+};
+
+  const bulkSuspend = async () => {
+  if (!selectedIds.length) return;
+
+  try {
+    setBulkBusy(true);
+    await API.patch("/admin/users/bulk-status", {
+      userIds: selectedIds,
+      status: "suspended",
+    });
+
+    toast.success("Selected users suspended");
+    setSelectedIds([]);
+    await fetchUsers();
+  } catch (err) {
+    toast.error(getErrorMessage(err, "Could not suspend selected users"));
+  } finally {
+    setBulkBusy(false);
+  }
+};
+
+const bulkDelete = async () => {
+  if (!selectedIds.length) return;
+
+  if (!window.confirm(`Permanently delete ${selectedIds.length} selected users? This cannot be undone.`)) {
+    return;
+  }
+
+  try {
+    setBulkBusy(true);
+    await API.post("/admin/users/bulk-delete", {
+      userIds: selectedIds,
+    });
+
+    toast.success("Selected users deleted");
+    setSelectedIds([]);
+    await fetchUsers();
+  } catch (err) {
+    toast.error(getErrorMessage(err, "Could not delete selected users"));
+  } finally {
+    setBulkBusy(false);
+  }
+};
   const createStaff = async (e) => {
     e.preventDefault();
     setStaffError("");
@@ -141,22 +212,55 @@ export default function AdminDashboard() {
           </form>
 
           <div className="card table-wrap">
+  
             <table className="table">
-              <thead>
-                <tr><th>User</th><th>Role</th><th>Status</th><th>Email</th><th>Joined</th><th>Actions</th></tr>
-              </thead>
+                <thead>
+  <tr>
+    {isSuperadmin && (
+      <th>
+        <input
+          type="checkbox"
+          checked={allSelected}
+          onChange={toggleSelectAll}
+          disabled={selectableUsers.length === 0 || loading || bulkBusy}
+          aria-label="Select all eligible users"
+        />
+      </th>
+    )}
+    <th>User</th>
+    <th>Role</th>
+    <th>Status</th>
+    <th>Email</th>
+    <th>Joined</th>
+    <th>Actions</th>
+  </tr>
+</thead>
+
               <tbody>
                 {loading ? (
-                  <tr><td colSpan="6" className="center muted" style={{ padding: 32 }}><span className="spinner" /></td></tr>
+                  <tr><td colSpan={isSuperadmin ? 7 : 6} className="center muted" style={{ padding: 32 }}><span className="spinner" /></td></tr>
                 ) : users.length === 0 ? (
-                  <tr><td colSpan="6" className="center muted" style={{ padding: 32 }}>No users found</td></tr>
+                  <tr><td colSpan={isSuperadmin ? 7 : 6} className="center muted" style={{ padding: 32 }}>No users found</td></tr>
                 ) : (
                   users.map((u) => {
                     const canManage = isSuperadmin || u.role === "user";
-                    const self = u.id === user.id;
+                    const self = u.id === user?.id;
                     return (
                       <tr key={u.id}>
-                        <td><strong>{u.name || "—"}</strong><div className="small muted">{u.email}</div></td>
+  {isSuperadmin && (
+    <td>
+      {u.role === "user" && !self ? (
+        <input
+          type="checkbox"
+          checked={selectedIds.includes(u.id)}
+          onChange={() => toggleSelectUser(u.id)}
+          disabled={bulkBusy || busyId === u.id}
+          aria-label={`Select ${u.email}`}
+        />
+      ) : null}
+    </td>
+  )}
+  <td><strong>{u.name || "—"}</strong><div className="small muted">{u.email}</div></td>
                         <td><span className={`badge ${roleBadge[u.role]}`}>{u.role}</span></td>
                         <td><span className={`badge ${u.status === "active" ? "badge-success" : "badge-danger"}`}>{u.status}</span></td>
                         <td>{u.isVerified ? <span className="badge badge-success">Verified</span> : <span className="badge badge-warn">Pending</span>}</td>
@@ -189,7 +293,29 @@ export default function AdminDashboard() {
               </tbody>
             </table>
           </div>
+                          {isSuperadmin && selectedIds.length > 0 && (
+  <div className="toolbar-row">
+    <span className="small muted">
+      {selectedIds.length} user(s) selected
+    </span>
 
+    <button
+      className="btn btn-outline"
+      onClick={bulkSuspend}
+      disabled={bulkBusy}
+    >
+      {bulkBusy ? "Processing..." : "Suspend Selected"}
+    </button>
+
+    <button
+      className="btn btn-danger-outline"
+      onClick={bulkDelete}
+      disabled={bulkBusy}
+    >
+      {bulkBusy ? "Processing..." : "Delete Selected"}
+    </button>
+  </div>
+)}
           {pagination.pages > 1 && (
             <div className="pagination">
               <button className="btn btn-outline btn-sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</button>

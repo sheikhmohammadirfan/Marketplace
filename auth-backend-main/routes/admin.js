@@ -7,7 +7,18 @@ const { handleValidation } = require("../middleware/validators");
 
 // Everything here requires an authenticated admin or superadmin.
 router.use(authenticate, authorize("admin", "superadmin"));
+// Bulk actions — superadmin only
+router.patch(
+  "/users/bulk-status",
+  authorize("superadmin"),
+  ctrl.bulkSetUserStatus
+);
 
+router.post(
+  "/users/bulk-delete",
+  authorize("superadmin"),
+  ctrl.bulkDeleteUsers
+);
 router.get("/users", ctrl.listUsers);
 router.get("/users/:userId", ctrl.getUser);
 router.patch("/users/:userId/role", ctrl.updateUserRole);

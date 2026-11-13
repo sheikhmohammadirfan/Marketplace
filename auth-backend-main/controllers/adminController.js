@@ -224,6 +224,177 @@ const getAuditLogs = async (req, res) => {
   }
 };
 
+
+async function bulkSetUserStatus(req, res) {
+  try {
+    const { userIds, status } = req.body;
+
+    if (!Array.isArray(userIds) || userIds.length === 0 || userIds.length > 100) {
+      return res.status(400).json({
+        message: "Select between 1 and 100 users.",
+      });
+    }
+
+    if (status !== "suspended") {
+      return res.status(400).json({
+        message: "Only bulk suspension is supported.",
+      });
+    }
+
+    const ids = [...new Set(userIds.map(String))];
+
+    if (ids.length !== userIds.length || ids.some(id => !/^[0-9a-fA-F]{24}$/.test(id))) {
+      return res.status(400).json({
+        message: "Invalid or duplicate user IDs.",
+      });
+    }
+
+    if (ids.includes(req.user.id)) {
+      return res.status(400).json({
+        message: "You cannot suspend your own account.",
+      });
+    }
+
+    const users = await User.find({ _id: { $in: ids } })
+      .select("_id email role status");
+
+    if (users.length !== ids.length) {
+      return res.status(404).json({
+        message: "One or more selected users were not found.",
+      });
+    }
+
+    if (users.some(user => user.role !== "user")) {
+      return res.status(403).json({
+        message: "Bulk actions are restricted to regular users. Staff accounts cannot be selected.",
+      });
+    }
+
+    const activeUsers = users.filter(user => user.status !== "suspended");
+
+    if (activeUsers.length === 0) {
+      return res.status(400).json({
+        message: "All selected users are already suspended.",
+      });
+    }
+
+    const activeIds = activeUsers.map(user => user._id);
+
+    await User.updateMany(
+      { _id: { $in: activeIds }, role: "user" },
+      { $set: { status: "suspended" } }
+    );
+
+    await RefreshToken.updateMany(
+      { user: { $in: activeIds }, revokedAt: null },
+      { $set: { revokedAt: new Date() } }
+    );
+
+    await Promise.all(
+  activeUsers.map(user =>
+    logAudit({
+      req,
+      actor: req.user.id,
+      actorEmail: req.user.email,
+      action: "USER_SUSPENDED",
+      targetUser: user._id,
+      meta: {
+        suspendedEmail: user.email,
+        bulkAction: true,
+      },
+    })
+  )
+);
+
+    return res.json({
+      message: `${activeUsers.length} user(s) suspended successfully.`,
+      count: activeUsers.length,
+    });
+  } catch (err) {
+    console.error("Bulk suspend error:", err);
+    return res.status(500).json({
+      message: "Failed to suspend selected users.",
+    });
+  }
+}
+
+async function bulkDeleteUsers(req, res) {
+  try {
+    const { userIds } = req.body;
+
+    if (!Array.isArray(userIds) || userIds.length === 0 || userIds.length > 100) {
+      return res.status(400).json({
+        message: "Select between 1 and 100 users.",
+      });
+    }
+
+    const ids = [...new Set(userIds.map(String))];
+
+    if (ids.length !== userIds.length || ids.some(id => !/^[0-9a-fA-F]{24}$/.test(id))) {
+      return res.status(400).json({
+        message: "Invalid or duplicate user IDs.",
+      });
+    }
+
+    if (ids.includes(req.user.id)) {
+      return res.status(400).json({
+        message: "You cannot delete your own account.",
+      });
+    }
+
+    const users = await User.find({ _id: { $in: ids } })
+      .select("_id email role");
+
+    if (users.length !== ids.length) {
+      return res.status(404).json({
+        message: "One or more selected users were not found.",
+      });
+    }
+
+    if (users.some(user => user.role !== "user")) {
+      return res.status(403).json({
+        message: "Bulk actions are restricted to regular users. Staff accounts cannot be selected.",
+      });
+    }
+
+    await User.deleteMany({
+      _id: { $in: ids },
+      role: "user",
+    });
+
+    await RefreshToken.deleteMany({
+      user: { $in: ids },
+    });
+
+    await Promise.all(
+  users.map(user =>
+    logAudit({
+      req,
+      actor: req.user.id,
+      actorEmail: req.user.email,
+      action: "USER_DELETED",
+      targetUser: user._id,
+      meta: {
+        deletedEmail: user.email,
+        deletedRole: user.role,
+        bulkAction: true,
+      },
+    })
+  )
+);
+
+    return res.json({
+      message: `${users.length} user(s) deleted successfully.`,
+      count: users.length,
+    });
+  } catch (err) {
+    console.error("Bulk delete error:", err);
+    return res.status(500).json({
+      message: "Failed to delete selected users.",
+    });
+  }
+}
+
 module.exports = {
   listUsers,
   getUser,
@@ -232,4 +403,6 @@ module.exports = {
   setUserStatus,
   deleteUser,
   getAuditLogs,
+  bulkSetUserStatus,
+ bulkDeleteUsers,
 };

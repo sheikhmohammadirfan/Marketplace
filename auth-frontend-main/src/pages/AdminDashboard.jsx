@@ -219,6 +219,7 @@ const bulkDelete = async () => {
     {isSuperadmin && (
       <th>
         <input
+        className="admin-checkbox"
           type="checkbox"
           checked={allSelected}
           onChange={toggleSelectAll}
@@ -252,6 +253,7 @@ const bulkDelete = async () => {
       {u.role === "user" && !self ? (
         <input
           type="checkbox"
+          className="admin-checkbox"
           checked={selectedIds.includes(u.id)}
           onChange={() => toggleSelectUser(u.id)}
           disabled={bulkBusy || busyId === u.id}
@@ -294,7 +296,7 @@ const bulkDelete = async () => {
             </table>
           </div>
                           {isSuperadmin && selectedIds.length > 0 && (
-  <div className="toolbar-row">
+  <div className="toolbar-row bulk-actions">
     <span className="small muted">
       {selectedIds.length} user(s) selected
     </span>

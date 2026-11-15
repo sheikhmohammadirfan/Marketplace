@@ -22,13 +22,34 @@ import Chat from "./pages/Chat";
 import Account from "./pages/Account";
 import AdminDashboard from "./pages/AdminDashboard";
 
+
+import { useEffect } from "react";
+import { useAuth } from "./context/AuthContext";
+import { getSocket } from "./utils/socket";
+
 const guard = (el) => <ProtectedRoute>{el}</ProtectedRoute>;
+
+function GlobalSocket() {
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user) return;
+
+    const socket = getSocket();
+    socket.connect();
+
+    return () => socket.disconnect();
+  }, [user]);
+
+  return null;
+}
 
 export default function App() {
   return (
     <ToastProvider>
       <AuthProvider>
         <WishlistProvider>
+        <GlobalSocket />
           <Routes>
             {/* Login / signup / password pages: split-screen layout */}
             <Route element={<AuthLayout />}>

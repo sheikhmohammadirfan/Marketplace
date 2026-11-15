@@ -9,5 +9,6 @@ router.post("/conversations", ctrl.startConversation);
 router.get("/conversations", ctrl.getConversations);
 router.get("/conversations/:conversationId/messages", ctrl.getMessages);
 router.post("/conversations/:conversationId/messages", ctrl.sendMessage);
+router.get("/unread-count", ctrl.getUnreadCount);
 
 module.exports = router;

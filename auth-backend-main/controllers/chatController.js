@@ -57,12 +57,40 @@ async function assertParticipant(req, res, conversation) {
   return true;
 }
 
+const getUnreadCount = async (req, res) => {
+  try {
+    const count = await Message.countDocuments({
+      sender: { $ne: req.user.id },
+      readBy: { $ne: req.user.id },
+      conversation: {
+        $in: await Conversation.find({
+          $or: [{ buyer: req.user.id }, { seller: req.user.id }],
+        }).distinct("_id"),
+      },
+    });
+
+    res.json({ count });
+  } catch (err) {
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 const getMessages = async (req, res) => {
   try {
     const conversation = await Conversation.findById(req.params.conversationId);
     if (!conversation) return res.status(404).json({ message: "Conversation not found" });
     if (!(await assertParticipant(req, res, conversation))) return;
 
+    await Message.updateMany(
+  {
+    conversation: conversation._id,
+    sender: { $ne: req.user.id },
+    readBy: { $ne: req.user.id },
+  },
+  {
+    $addToSet: { readBy: req.user.id },
+  }
+);
     const messages = await Message.find({ conversation: conversation._id })
       .sort({ createdAt: 1 })
       .limit(500);
@@ -106,10 +134,24 @@ const sendMessage = async (req, res) => {
     const io = req.app.get("io");
     if (io) io.to(`conv:${conversation._id}`).emit("new-message", message);
 
+    if (io) {
+  const recipientId =
+    conversation.buyer.toString() === req.user.id
+      ? conversation.seller
+      : conversation.buyer;
+
+  io.to(`user:${recipientId}`).emit("message-notification", {
+    conversationId: conversation._id,
+    senderId: req.user.id,
+    text: message.text,
+    createdAt: message.createdAt,
+  });
+}
+
     res.status(201).json({ message });
   } catch (err) {
     res.status(err.status || 500).json({ message: err.message || "Internal server error" });
   }
 };
 
-module.exports = { startConversation, getConversations, getMessages, sendMessage, createMessage };
+module.exports = { startConversation, getConversations, getMessages, sendMessage, createMessage, getUnreadCount };

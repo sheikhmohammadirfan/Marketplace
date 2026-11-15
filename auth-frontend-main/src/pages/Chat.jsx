@@ -57,7 +57,6 @@ export default function Chat() {
     return () => {
       socket.off("new-message", onMessage);
       socket.off("connect", onConnect);
-      socket.disconnect();
     };
   }, []);
 

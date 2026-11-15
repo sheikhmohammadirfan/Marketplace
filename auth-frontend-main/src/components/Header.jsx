@@ -4,16 +4,41 @@ import { ChevronDown, Heart, LayoutList, LogOut, MessageCircle, Plus, Search, Sh
 import { useAuth } from "../context/AuthContext";
 import { useWishlist } from "../context/WishlistContext";
 import { initials } from "../utils/format";
+import API from "../utils/api";
+import { getSocket } from "../utils/socket";
 
 export default function Header() {
   const { user, logout } = useAuth();
   const { count } = useWishlist();
+  const [unreadCount, setUnreadCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
   const [q, setQ] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const menuRef = useRef(null);
+
+  useEffect(() => {
+  if (!user) {
+    setUnreadCount(0);
+    return;
+  }
+
+  const loadUnreadCount = () => {
+    API.get("/chat/unread-count")
+      .then((res) => setUnreadCount(res.data.count || 0))
+      .catch(() => {});
+  };
+
+  loadUnreadCount();
+
+  const socket = getSocket();
+  socket.on("message-notification", loadUnreadCount);
+
+  return () => {
+    socket.off("message-notification", loadUnreadCount);
+  };
+}, [user, location.pathname]);
 
   // Keep the search box in sync with the URL (e.g. after "clear filters" or AI "see all results").
   useEffect(() => {
@@ -80,9 +105,19 @@ export default function Header() {
                 <Heart size={21} />
                 {count > 0 && <span className="count-badge">{count > 99 ? "99+" : count}</span>}
               </Link>
-              <Link to="/chat" className="icon-btn" aria-label="Chat" title="Chat">
-                <MessageCircle size={21} />
-              </Link>
+              <Link
+  to="/chat"
+  className="icon-btn"
+  aria-label={`Chat${unreadCount > 0 ? ` (${unreadCount} unread)` : ""}`}
+  title="Chat"
+>
+  <MessageCircle size={21} />
+  {unreadCount > 0 && (
+    <span className="count-badge">
+      {unreadCount > 99 ? "99+" : unreadCount}
+    </span>
+  )}
+</Link>
             </>
           )}
 

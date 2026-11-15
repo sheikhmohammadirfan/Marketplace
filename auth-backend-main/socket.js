@@ -58,6 +58,19 @@ function initSocket(httpServer, allowedOrigins) {
       try {
         const { message } = await createMessage({ conversationId, senderId: socket.userId, text });
         io.to(`conv:${conversationId}`).emit("new-message", message);
+
+const conversation = await Conversation.findById(conversationId);
+const recipientId =
+  conversation.buyer.toString() === socket.userId
+    ? conversation.seller
+    : conversation.buyer;
+
+io.to(`user:${recipientId}`).emit("message-notification", {
+  conversationId,
+  senderId: socket.userId,
+  text: message.text,
+  createdAt: message.createdAt,
+});
         if (typeof ack === "function") ack({ ok: true, message });
       } catch (err) {
         if (typeof ack === "function") ack({ ok: false, error: err.message });

@@ -1,6 +1,5 @@
 const { Server } = require("socket.io");
-const cookie = require("cookie");
-const { verifyAccessToken } = require("./utils/tokens");
+const { verifySocketToken } = require("./utils/tokens");
 const Conversation = require("./models/Conversation");
 const { createMessage } = require("./controllers/chatController");
 
@@ -18,21 +17,18 @@ function initSocket(httpServer, allowedOrigins) {
 
   // Auth handshake: read the same httpOnly access_token cookie the REST API uses.
   io.use((socket, next) => {
-    try {
-      const rawCookie = socket.handshake.headers.cookie;
-      if (!rawCookie) return next(new Error("Authentication required"));
+  try {
+    const token = socket.handshake.auth?.token;
+    if (!token) return next(new Error("Authentication required"));
 
-      const parsed = cookie.parse(rawCookie);
-      const token = parsed.access_token;
-      if (!token) return next(new Error("Authentication required"));
+    const decoded = verifySocketToken(token);
+    socket.userId = decoded.sub;
 
-      const decoded = verifyAccessToken(token);
-      socket.userId = decoded.sub;
-      next();
-    } catch (err) {
-      next(new Error("Authentication required"));
-    }
-  });
+    next();
+  } catch {
+    next(new Error("Authentication required"));
+  }
+});
 
   io.on("connection", (socket) => {
     // Personal room — lets the server notify a user regardless of which conversation they're viewing.

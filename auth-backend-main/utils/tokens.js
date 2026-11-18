@@ -16,6 +16,29 @@ function verifyAccessToken(token) {
   return jwt.verify(token, process.env.JWT_ACCESS_SECRET);
 }
 
+function signSocketToken(userId) {
+  return jwt.sign(
+    { sub: userId, purpose: "socket" },
+    process.env.JWT_ACCESS_SECRET,
+    {
+      expiresIn: "60s",
+      audience: "marketplace-socket",
+    }
+  );
+}
+
+function verifySocketToken(token) {
+  const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET, {
+    audience: "marketplace-socket",
+  });
+
+  if (decoded.purpose !== "socket") {
+    throw new Error("Invalid socket token");
+  }
+
+  return decoded;
+}
+
 // Raw refresh token = random bytes. We only ever persist its hash.
 function generateRefreshTokenRaw() {
   return crypto.randomBytes(48).toString("hex");
@@ -48,4 +71,6 @@ module.exports = {
   refreshExpiryDate,
   generateOneTimeToken,
   REFRESH_TOKEN_TTL_DAYS,
+  signSocketToken,
+  verifySocketToken,
 };
